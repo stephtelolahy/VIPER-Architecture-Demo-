@@ -26,51 +26,33 @@
 /// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 /// THE SOFTWARE.
 
-import SwiftUI
+import MapKit
+import Combine
 
-struct TripDetailView: View {
-    @ObservedObject var presenter: TripDetailPresenter
+class TripMapViewPresenter: ObservableObject {
+    @Published var pins: [MKAnnotation] = []
+    @Published var routes: [MKRoute] = []
     
+    let interactor: TripDetailInteractor
+    private var cancellables = Set<AnyCancellable>()
     
-    var body: some View {
-        VStack {
-            TextField("Trip Name", text: presenter.setTripName)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .padding([.horizontal])
-            presenter.makeMapView()
-            Text(presenter.distanceLabel)
-        }
-        .navigationBarTitle(Text(presenter.tripName), displayMode: .inline)
-        .navigationBarItems(trailing: Button("Save", action: presenter.save))
-        HStack {
-          Spacer()
-          EditButton()
-          Button(action: presenter.addWaypoint) {
-            Text("Add")
-          }
-        }.padding([.horizontal])
-        List {
-          ForEach(presenter.waypoints, content: presenter.cell)
-            .onMove(perform: presenter.didMoveWaypoint(fromOffsets:toOffset:))
-            .onDelete(perform: presenter.didDeleteWaypoint(_:))
-        }
-
+    init(interactor: TripDetailInteractor) {
+        self.interactor = interactor
+        
+        interactor.$waypoints
+            .map {
+                $0.map {
+                    let annotation = MKPointAnnotation()
+                    annotation.coordinate = $0.location
+                    return annotation
+                }
+            }
+            .assign(to: \.pins, on: self)
+            .store(in: &cancellables)
+        
+        interactor.$directions
+            .assign(to: \.routes, on: self)
+            .store(in: &cancellables)
     }
 }
 
-struct TripDetailView_Previews: PreviewProvider {
-    static var previews: some View {
-        let model = DataModel.sample
-        let trip = model.trips[1]
-        let mapProvider = RealMapDataProvider()
-        let presenter = TripDetailPresenter(interactor:
-                                                TripDetailInteractor(
-                                                    trip: trip,
-                                                    model: model,
-                                                    mapInfoProvider: mapProvider))
-        return NavigationView {
-            TripDetailView(presenter: presenter)
-        }
-    }
-    
-}
